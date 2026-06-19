@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Android RCA Analyzer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    min-height: 100vh;
+    padding: 20px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  .header {
+    background: linear-gradient(135deg, #1a2332, #0f1923);
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .header-icon {
+    width: 52px; height: 52px;
+    background: linear-gradient(135deg, #00d4aa, #7c3aed);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    flex-shrink: 0;
+  }
+  .header h1 { font-size: 20px; font-weight: 700; color: #00d4aa; }
+  .header p { font-size: 13px; color: #8b949e; margin-top: 2px; }
+
+  .tabs {
+    display: flex; gap: 4px; margin-bottom: 18px;
+    background: #161b22; border-radius: 8px; padding: 4px;
+  }
+  .tab {
+    flex: 1; padding: 9px 6px; border: none; border-radius: 6px;
+    background: transparent; color: #8b949e; cursor: pointer;
+    font-size: 12px; font-weight: 600; transition: all 0.2s;
+    text-align: center;
+  }
+  .tab.active { background: #21262d; color: #00d4aa; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-size: 11px; color: #8b949e; font-weight: 700; letter-spacing: 0.5px; }
+  input, select, textarea {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    color: #e6edf3; padding: 10px 12px; font-size: 13px;
+    font-family: inherit; transition: border-color 0.2s; resize: vertical;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #00d4aa; }
+  textarea { font-family: 'Consolas', monospace; font-size: 12px; min-height: 90px; }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .tag {
+    padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    cursor: pointer; border: 1px solid transparent; transition: all 0.2s; user-select: none;
+  }
+  .tag.crash { background: #2d1b1b; color: #f85149; border-color: #f8514940; }
+  .tag.anr { background: #2d1f1b; color: #ffa657; border-color: #ffa65740; }
+  .tag.camera { background: #1b2d2b; color: #00d4aa; border-color: #00d4aa40; }
+  .tag.perf { background: #1b1b2d; color: #79c0ff; border-color: #79c0ff40; }
+  .tag.battery { background: #2d2b1b; color: #e3b341; border-color: #e3b34140; }
+  .tag.memory { background: #2d1b2d; color: #d2a8ff; border-color: #d2a8ff40; }
+  .tag.other { background: #1e2328; color: #8b949e; border-color: #30363d; }
+  .tag.selected { filter: brightness(1.5); transform: scale(1.05); }
+
+  .btn {
+    width: 100%; padding: 13px; border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    background: linear-gradient(135deg, #00d4aa, #7c3aed);
+    color: white; margin-top: 16px; transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.88; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .loading { display: none; text-align: center; padding: 50px 20px; }
+  .spinner {
+    width: 44px; height: 44px; border: 3px solid #30363d;
+    border-top-color: #00d4aa; border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading p { color: #8b949e; font-size: 14px; }
+
+  .result { display: none; }
+  .rca-section {
+    background: #161b22; border: 1px solid #30363d;
+    border-radius: 10px; margin-bottom: 14px; overflow: hidden;
+  }
+  .rca-section-header {
+    background: #1c2128; padding: 12px 16px;
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid #30363d;
+  }
+  .rca-section-header h3 { font-size: 13px; font-weight: 700; color: #e6edf3; letter-spacing: 0.5px; }
+  .badge {
+    margin-left: auto; padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700;
+  }
+  .badge-critical { background: #3d1a1a; color: #f85149; }
+  .badge-high { background: #2d1f1b; color: #ffa657; }
+  .badge-medium { background: #2d2b1b; color: #e3b341; }
+  .badge-low { background: #1b2d2b; color: #00d4aa; }
+
+  .rca-body { padding: 14px 16px; }
+  .rca-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-start; }
+  .rca-label { min-width: 150px; font-size: 11px; font-weight: 700; color: #8b949e; letter-spacing: 0.4px; padding-top: 2px; flex-shrink: 0; }
+  .rca-value { font-size: 13px; color: #e6edf3; flex: 1; line-height: 1.55; }
+  .rca-value.code {
+    font-family: 'Consolas', monospace; font-size: 11px;
+    background: #0d1117; padding: 8px 10px; border-radius: 6px;
+    border: 1px solid #30363d; white-space: pre-wrap; word-break: break-all;
+  }
+  .rca-list { list-style: none; flex: 1; }
+  .rca-list li {
+    padding: 5px 0 5px 16px; border-bottom: 1px solid #21262d;
+    font-size: 13px; color: #c9d1d9; position: relative; line-height: 1.4;
+  }
+  .rca-list li::before { content: "▸"; color: #00d4aa; position: absolute; left: 0; top: 6px; }
+  .rca-list li:last-child { border-bottom: none; }
+
+  .layer-map { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
+  .layer-item {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    padding: 10px; text-align: center;
+  }
+  .layer-item.affected { border-color: #f85149; background: #160c0c; }
+  .layer-item.secondary { border-color: #ffa657; background: #160f08; }
+  .layer-name { font-weight: 700; font-size: 11px; color: #8b949e; margin-bottom: 3px; }
+  .layer-item.affected .layer-name { color: #f85149; }
+  .layer-item.secondary .layer-name { color: #ffa657; }
+  .layer-status { font-size: 10px; font-weight: 700; }
+  .layer-detail { font-size: 10px; color: #6e7681; margin-top: 4px; line-height: 1.3; }
+
+  .confidence-bar { background: #0d1117; border-radius: 6px; height: 8px; margin-top: 8px; overflow: hidden; border: 1px solid #30363d; }
+  .confidence-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #00d4aa, #7c3aed); }
+
+  .auto-item {
+    background: #0d1117; border: 1px solid #21262d; border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 8px;
+  }
+  .auto-item-name { font-weight: 700; color: #e6edf3; font-size: 13px; }
+  .auto-item-type { font-size: 10px; color: #00d4aa; font-weight: 700; margin-bottom: 4px; }
+  .auto-item-desc { font-size: 12px; color: #8b949e; margin-top: 4px; }
+
+  .new-btn {
+    width: 100%; padding: 11px; border: 1px solid #30363d; border-radius: 8px;
+    background: transparent; color: #8b949e; cursor: pointer; font-size: 13px;
+    margin-top: 14px; transition: all 0.2s;
+  }
+  .new-btn:hover { border-color: #00d4aa; color: #00d4aa; }
+  .hint { font-size: 11px; color: #6e7681; margin-top: 5px; }
+  .section-divider { font-size: 11px; font-weight: 700; color: #6e7681; letter-spacing: 1px; margin: 16px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #21262d; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">🤖</div>
+  <div>
+    <h1>Android RCA Analyzer</h1>
+    <p>Senior QA Architect · Framework Engineer · Root Cause Analysis Expert</p>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" id="tab-input" onclick="switchTab('input')">📋 Bug Input</button>
+  <button class="tab" id="tab-logs" onclick="switchTab('logs')">📄 Logs &amp; Traces</button>
+  <button class="tab" id="tab-result" onclick="switchTab('result')" style="display:none">📊 RCA Report</button>
+</div>
+
+<!-- INPUT PANEL -->
+<div class="panel active" id="panel-input">
+  <div class="form-grid">
+    <div class="form-group">
+      <label>DEVICE MODEL</label>
+      <input type="text" id="device" placeholder="e.g. Samsung Galaxy S25 Ultra" />
+    </div>
+    <div class="form-group">
+      <label>ANDROID VERSION</label>
+      <input type="text" id="android" placeholder="e.g. Android 15" />
+    </div>
+    <div class="form-group">
+      <label>BUILD VERSION</label>
+      <input type="text" id="build" placeholder="e.g. S928BXXS3AYA1" />
+    </div>
+    <div class="form-group">
+      <label>AFFECTED APP / MODULE</label>
+      <input type="text" id="module" placeholder="e.g. Samsung Camera, Settings" />
+    </div>
+    <div class="form-group full">
+      <label>BUG DESCRIPTION *</label>
+      <textarea id="bugDesc" placeholder="Describe the issue — what happens, when it happens, under what conditions..." style="min-height:80px;"></textarea>
+    </div>
+    <div class="form-group full">
+      <label>REPRODUCTION STEPS</label>
+      <textarea id="repro" placeholder="Step 1: ...&#10;Step 2: ...&#10;Step 3: ..." style="min-height:80px;"></textarea>
+    </div>
+    <div class="form-group full">
+      <label>DEFECT CATEGORY (tap to select, or let AI auto-detect)</label>
+      <div class="tag-row">
+        <span class="tag crash" onclick="selectTag(this,'Crash')">💥 Crash</span>
+        <span class="tag anr" onclick="selectTag(this,'ANR')">⏳ ANR</span>
+        <span class="tag camera" onclick="selectTag(this,'Camera Failure')">📷 Camera Failure</span>
+        <span class="tag perf" onclick="selectTag(this,'Performance Issue')">⚡ Performance</span>
+        <span class="tag battery" onclick="selectTag(this,'Battery Drain')">🔋 Battery Drain</span>
+        <span class="tag memory" onclick="selectTag(this,'Memory Leak')">🧠 Memory Leak</span>
+        <span class="tag other" onclick="selectTag(this,'Thermal Issue')">🌡️ Thermal</span>
+        <span class="tag other" onclick="selectTag(this,'UI Issue')">🖥️ UI Issue</span>
+        <span class="tag other" onclick="selectTag(this,'Connectivity Issue')">📡 Connectivity</span>
+        <span class="tag other" onclick="selectTag(this,'Sensor Failure')">🔬 Sensor</span>
+      </div>
+      <p class="hint">Leave unselected to let the AI auto-classify based on your description and logs.</p>
+    </div>
+  </div>
+  <button class="btn" onclick="switchTab('logs')">Next: Add Logs &amp; Traces →</button>
+</div>
+
+<!-- LOGS PANEL -->
+<div class="panel" id="panel-logs">
+  <div class="section-divider">DIAGNOSTIC ARTIFACTS — paste what you have (all fields optional)</div>
+  <div class="form-grid">
+    <div class="form-group full">
+      <label>LOGCAT LOGS</label>
+      <textarea id="logcat" placeholder="Paste relevant logcat output here..." style="min-height:110px;"></textarea>
+    </div>
+    <div class="form-group full">
+      <label>ANR TRACES / TOMBSTONE</label>
+      <textarea id="anr" placeholder="Paste ANR traces or tombstone content here..." style="min-height:100px;"></textarea>
+    </div>
+    <div class="form-group full">
+      <label>CAMERA / FRAMEWORK / APPLICATION LOGS</label>
+      <textarea id="camLogs" placeholder="Paste Camera HAL, CameraService, or framework-level logs..." style="min-height:90px;"></textarea>
+    </div>
+    <div class="form-group full">
+      <label>PERFETTO / SYSTRACE / BATTERY STATS / MEMORY DUMP</label>
+      <textarea id="perfetto" placeholder="Paste any performance trace, battery stats, or memory dump summaries..." style="min-height:90px;"></textarea>
+    </div>
+  </div>
+  <button class="btn" id="analyzeBtn" onclick="runAnalysis()">🔍 Run Deep RCA Analysis</button>
+</div>
+
+<!-- RESULT PANEL -->
+<div class="panel" id="panel-result">
+  <div id="loadingDiv" class="loading">
+    <div class="spinner"></div>
+    <p id="loadingText">Initializing RCA engine...</p>
+  </div>
+  <div id="resultDiv" class="result"></div>
+</div>
+
+<script>
+let selectedCategory = '';
+
+function switchTab(tab) {
+  ['input','logs','result'].forEach((t, i) => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('panel-' + t).classList.toggle('active', t === tab);
+  });
+}
+
+function selectTag(el, cat) {
+  document.querySelectorAll('.tag').forEach(t => t.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedCategory = cat;
+}
+
+const loadingMsgs = [
+  "Parsing logcat entries...",
+  "Mapping to Android framework layers...",
+  "Extracting exception chain and stack trace...",
+  "Calculating confidence scores...",
+  "Identifying root cause chain...",
+  "Generating fix recommendations...",
+  "Assessing production risk...",
+  "Finalizing RCA report..."
+];
+
+async function runAnalysis() {
+  const bugDesc = document.getElementById('bugDesc').value.trim();
+  if (!bugDesc) {
+    alert('Please enter a bug description on the Bug Input tab first.');
+    switchTab('input');
+    return;
+  }
+
+  document.getElementById('tab-result').style.display = '';
+  switchTab('result');
+  document.getElementById('loadingDiv').style.display = 'block';
+  document.getElementById('resultDiv').style.display = 'none';
+  document.getElementById('analyzeBtn').disabled = true;
+
+  let mi = 0;
+  const interval = setInterval(() => {
+    document.getElementById('loadingText').textContent = loadingMsgs[mi % loadingMsgs.length];
+    mi++;
+  }, 1000);
+
+  const vals = id => document.getElementById(id).value.trim() || 'Not provided';
+
+  const prompt = `You are a Senior Android QA Architect, Android Framework Engineer, and Root Cause Analysis Expert.
+
+Analyze this Android defect report and produce a complete structured RCA.
+
+=== BUG REPORT ===
+Device: ${vals('device')}
+Android Version: ${vals('android')}
+Build: ${vals('build')}
+Module: ${vals('module')}
+Selected Category: ${selectedCategory || 'Auto-detect'}
+
+Bug Description:
+${bugDesc}
+
+Reproduction Steps:
+${vals('repro')}
+
+Logcat Logs:
+${vals('logcat')}
+
+ANR Traces / Tombstone:
+${vals('anr')}
+
+Camera / Framework Logs:
+${vals('camLogs')}
+
+Perfetto / Battery / Memory:
+${vals('perfetto')}
+
+=== INSTRUCTIONS ===
+Follow all 8 RCA investigation steps: Categorize, Log Analysis, Framework Mapping, Root Cause, Confidence Score, Fix Recommendation, Risk Assessment, Automation Opportunity.
+
+Respond ONLY with a JSON object — no markdown, no backticks, no extra text.
+
+{
+  "bugSummary": {
+    "issueType": "string",
+    "affectedModule": "string",
+    "severity": "Critical|High|Medium|Low",
+    "priority": "P1|P2|P3|P4",
+    "exceptionType": "string or N/A",
+    "process": "string or N/A",
+    "thread": "string or N/A"
+  },
+  "layerMapping": [
+    {"layer": "Application Layer", "status": "affected|secondary|clean", "detail": "string"},
+    {"layer": "Framework Layer", "status": "affected|secondary|clean", "detail": "string"},
+    {"layer": "HAL Layer", "status": "affected|secondary|clean", "detail": "string"},
+    {"layer": "Kernel Layer", "status": "affected|secondary|clean", "detail": "string"},
+    {"layer": "Vendor Layer", "status": "affected|secondary|clean", "detail": "string"},
+    {"layer": "Driver Layer", "status": "affected|secondary|clean", "detail": "string"}
+  ],
+  "rootCause": {
+    "primaryCause": "string",
+    "secondaryCause": "string",
+    "immediateCause": "string",
+    "underlyingCause": "string",
+    "triggerCondition": "string",
+    "affectedComponent": "string",
+    "dependencyFailure": "string",
+    "evidence": ["string", "string", "string"],
+    "stackTrace": "string or N/A"
+  },
+  "confidenceScore": {
+    "level": "High|Medium|Low",
+    "percentage": 85,
+    "reasoning": "string"
+  },
+  "fixRecommendation": {
+    "developerFix": "string",
+    "configFix": "string",
+    "workaround": "string",
+    "validationPlan": "string"
+  },
+  "riskAssessment": {
+    "severity": "string",
+    "customerImpact": "string",
+    "productionRisk": "string"
+  },
+  "automationTests": [
+    {"name": "string", "type": "Regression|Smoke|Stress|Monkey|Unit", "description": "string"},
+    {"name": "string", "type": "Regression|Smoke|Stress|Monkey|Unit", "description": "string"},
+    {"name": "string", "type": "Regression|Smoke|Stress|Monkey|Unit", "description": "string"}
+  ],
+  "prevention": ["string", "string", "string"]
+}`;
+
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await resp.json();
+    clearInterval(interval);
+    let text = (data.content || []).map(i => i.text || '').join('');
+    text = text.replace(/```json|```/g, '').trim();
+    const rca = JSON.parse(text);
+    renderResult(rca);
+  } catch(err) {
+    clearInterval(interval);
+    document.getElementById('loadingDiv').style.display = 'none';
+    document.getElementById('resultDiv').style.display = 'block';
+    document.getElementById('resultDiv').innerHTML = `
+      <div style="background:#2d1b1b;border:1px solid #f85149;border-radius:10px;padding:20px;color:#f85149;">
+        <strong>Analysis Error</strong><br><br>
+        <span style="color:#e6edf3;font-size:13px;">${err.message}</span>
+      </div>`;
+    document.getElementById('analyzeBtn').disabled = false;
+  }
+}
+
+function severityBadge(s) {
+  const m = { critical: 'badge-critical', high: 'badge-high', medium: 'badge-medium', low: 'badge-low', p1: 'badge-critical', p2: 'badge-high', p3: 'badge-medium', p4: 'badge-low' };
+  return m[(s || '').toLowerCase()] || 'badge-low';
+}
+
+function renderResult(rca) {
+  document.getElementById('loadingDiv').style.display = 'none';
+  document.getElementById('resultDiv').style.display = 'block';
+  document.getElementById('analyzeBtn').disabled = false;
+
+  const bs = rca.bugSummary || {};
+  const rc = rca.rootCause || {};
+  const cs = rca.confidenceScore || {};
+  const fix = rca.fixRecommendation || {};
+  const risk = rca.riskAssessment || {};
+  const at = rca.automationTests || [];
+  const prev = rca.prevention || [];
+
+  const layers = (rca.layerMapping || []).map(l => `
+    <div class="layer-item ${l.status}">
+      <div class="layer-name">${l.layer.replace(' Layer','')}</div>
+      <div class="layer-status" style="color:${l.status==='affected'?'#f85149':l.status==='secondary'?'#ffa657':'#3d4450'};font-size:10px;">${l.status.toUpperCase()}</div>
+      <div class="layer-detail">${l.detail}</div>
+    </div>`).join('');
+
+  const evidence = (rc.evidence || []).map(e => `<li>${e}</li>`).join('');
+  const autoHTML = at.map((t,i) => `
+    <div class="auto-item">
+      <div class="auto-item-type">${i+1}. ${t.type}</div>
+      <div class="auto-item-name">${t.name}</div>
+      <div class="auto-item-desc">${t.description}</div>
+    </div>`).join('');
+  const prevHTML = prev.map(p => `<li>${p}</li>`).join('');
+
+  document.getElementById('resultDiv').innerHTML = `
+    <div class="rca-section">
+      <div class="rca-section-header">
+        <span>🐛</span><h3>BUG SUMMARY</h3>
+        <span class="badge ${severityBadge(bs.severity)}" style="margin-left:auto">${bs.severity}</span>
+        <span class="badge ${severityBadge(bs.priority)}" style="margin-left:6px">${bs.priority}</span>
+      </div>
+      <div class="rca-body">
+        <div class="rca-row"><span class="rca-label">Issue Type</span><span class="rca-value">${bs.issueType}</span></div>
+        <div class="rca-row"><span class="rca-label">Affected Module</span><span class="rca-value">${bs.affectedModule}</span></div>
+        <div class="rca-row"><span class="rca-label">Exception Type</span><span class="rca-value" style="color:#f85149;font-family:monospace">${bs.exceptionType}</span></div>
+        <div class="rca-row"><span class="rca-label">Process</span><span class="rca-value" style="font-family:monospace;font-size:12px">${bs.process}</span></div>
+        <div class="rca-row"><span class="rca-label">Thread</span><span class="rca-value" style="font-family:monospace;font-size:12px">${bs.thread}</span></div>
+      </div>
+    </div>
+
+    <div class="rca-section">
+      <div class="rca-section-header"><span>🗺️</span><h3>FRAMEWORK LAYER MAPPING</h3></div>
+      <div class="rca-body">
+        <div class="layer-map">${layers}</div>
+        <div style="margin-top:10px;font-size:11px;color:#6e7681;">🔴 Affected &nbsp;|&nbsp; 🟠 Secondary &nbsp;|&nbsp; ⬛ Clean</div>
+      </div>
+    </div>
+
+    <div class="rca-section">
+      <div class="rca-section-header">
+        <span>🔬</span><h3>ROOT CAUSE ANALYSIS</h3>
+        <span class="badge badge-${cs.level?.toLowerCase()==='high'?'low':cs.level?.toLowerCase()==='medium'?'medium':'critical'}" style="margin-left:auto">${cs.level} · ${cs.percentage}%</span>
+      </div>
+      <div class="rca-body">
+        <div class="rca-row"><span class="rca-label">Primary Cause</span><span class="rca-value" style="color:#f85149">${rc.primaryCause}</span></div>
+        <div class="rca-row"><span class="rca-label">Secondary Cause</span><span class="rca-value" style="color:#ffa657">${rc.secondaryCause}</span></div>
+        <div class="rca-row"><span class="rca-label">Immediate Cause</span><span class="rca-value">${rc.immediateCause}</span></div>
+        <div class="rca-row"><span class="rca-label">Underlying Cause</span><span class="rca-value">${rc.underlyingCause}</span></div>
+        <div class="rca-row"><span class="rca-label">Trigger Condition</span><span class="rca-value">${rc.triggerCondition}</span></div>
+        <div class="rca-row"><span class="rca-label">Affected Component</span><span class="rca-value">${rc.affectedComponent}</span></div>
+        <div class="rca-row"><span class="rca-label">Dependency Failure</span><span class="rca-value">${rc.dependencyFailure}</span></div>
+        <div class="rca-row"><span class="rca-label">Evidence</span><ul class="rca-list">${evidence}</ul></div>
+        ${rc.stackTrace && rc.stackTrace !== 'N/A' ? `<div class="rca-row"><span class="rca-label">Stack Trace</span><span class="rca-value code">${rc.stackTrace}</span></div>` : ''}
+        <div style="margin-top:12px">
+          <div style="font-size:11px;color:#8b949e;margin-bottom:5px">${cs.reasoning}</div>
+          <div class="confidence-bar"><div class="confidence-fill" style="width:${cs.percentage}%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rca-section">
+      <div class="rca-section-header"><span>🔧</span><h3>FIX RECOMMENDATION</h3></div>
+      <div class="rca-body">
+        <div class="rca-row"><span class="rca-label">Developer Fix</span><span class="rca-value">${fix.developerFix}</span></div>
+        <div class="rca-row"><span class="rca-label">Config Fix</span><span class="rca-value">${fix.configFix}</span></div>
+        <div class="rca-row"><span class="rca-label">Workaround</span><span class="rca-value">${fix.workaround}</span></div>
+        <div class="rca-row"><span class="rca-label">Validation Plan</span><span class="rca-value">${fix.validationPlan}</span></div>
+      </div>
+    </div>
+
+    <div class="rca-section">
+      <div class="rca-section-header"><span>⚠️</span><h3>RISK ASSESSMENT</h3></div>
+      <div class="rca-body">
+        <div class="rca-row"><span class="rca-label">Severity</span><span class="rca-value">${risk.severity}</span></div>
+        <div class="rca-row"><span class="rca-label">Customer Impact</span><span class="rca-value">${risk.customerImpact}</span></div>
+        <div class="rca-row"><span class="rca-label">Production Risk</span><span class="rca-value">${risk.productionRisk}</span></div>
+      </div>
+    </div>
+
+    <div class="rca-section">
+      <div class="rca-section-header"><span>🤖</span><h3>AUTOMATION TESTS TO ADD</h3></div>
+      <div class="rca-body">${autoHTML}</div>
+    </div>
+
+    <div class="rca-section">
+      <div class="rca-section-header"><span>🛡️</span><h3>PREVENTION STRATEGY</h3></div>
+      <div class="rca-body"><ul class="rca-list">${prevHTML}</ul></div>
+    </div>
+
+    <button class="new-btn" onclick="resetAll()">+ Analyze Another Bug</button>
+  `;
+}
+
+function resetAll() {
+  ['device','android','build','module','bugDesc','repro','logcat','anr','camLogs','perfetto'].forEach(id => document.getElementById(id).value = '');
+  selectedCategory = '';
+  document.querySelectorAll('.tag').forEach(t => t.classList.remove('selected'));
+  document.getElementById('tab-result').style.display = 'none';
+  document.getElementById('resultDiv').innerHTML = '';
+  switchTab('input');
+}
+</script>
+</body>
+</html>
